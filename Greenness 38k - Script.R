@@ -13,7 +13,14 @@ library(ggpubr) # 'ggplot2' Based Publication Ready Plots
 library(parallel) # makeCluster detectCores stopCluster
 library(doParallel) # registerDoParallel
 library(sf) # st_read st_transform st_as_sf %>% st_sf st_intersection st_buffer st_distance st_bbox st_as_sfc st_length as_Spatial
+library(DescrTab2) # "No used functions found"
+library(data.table) # data.table setDT month year
 
+ggplot(sample0914, aes(x = date, y = rh)) +
+  geom_point()
+#Citation
+toBibtex(citation("raster"))
+knitr::write_bib(a)
 #Temporary files
 showTmpFiles()
 rasterTmpFile()
@@ -59,9 +66,10 @@ sheng <- st_transform(sheng, crs =  "+proj=aea +lat_1=27 +lat_2=45 +lat_0=35 +lo
 
 #CRS
 crs = "+proj=aea +lat_1=27 +lat_2=45 +lat_0=35 +lon_0=105 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs"
-ndvi <- projectRaster(ndvi, crs = crs)
-plot(ndvi[[1]])
-plot(address[,3], add = T)
+system.time({a <- projectRaster(pppndvi, crs = crs)})
+crs(pppndvi) <- crs
+plot(a)
+plot(address1$geometry, add = T)
 plot(sheng[1,7], add = T)
 
 #get NDVI by time and address (change buffer and output name)(crs transformed here)
@@ -69,10 +77,10 @@ system.time({
   cl <- makeCluster(detectCores() - 1)
   registerDoParallel(cl)
   a <- foreach (i = 1:nrow(address1), .packages = c("raster", "sf"), .combine = "rbind") %dopar% {
-    a <- extract(pppndvi, address1[i,], buffer = 200, fun = mean, na.rm = T)
+    a <- extract(pppndvi, address1[i,], buffer = 400, fun = mean, na.rm = T)
   }
   a <- data.frame(t(a))
-  pppndvi200 <- foreach(i = 1:ncol(a), .packages = c("openair"), .combine = "c") %dopar% {
+  a <- foreach(i = 1:ncol(a), .packages = c("openair"), .combine = "c") %dopar% {
     mean(selectByDate(data.frame(date = rastertime, a[,i]), start = sample$date0[i], end = sample$date[i])[,2], na.rm = T)
   }
   stopCluster(cl)
@@ -137,6 +145,10 @@ semen$han <- 'han'
 semen[semen$race != "ºº×å" & semen$race != "ºº", ]$han <- 'no'
 semen$han <- factor(semen$han)
 summary(semen$han)
+#BMI
+setDT(sample0914)
+sample0914[, bmi := weight/(height/100)**2]
+sample0914[, bmi.cut := cut(bmi, breaks = c(0, 18.5, 25, Inf))]
 #Season 6-11 (+2)
 ggplot(sample0914, aes(x = date, y = tmp)) +
   geom_point()
@@ -190,7 +202,7 @@ a[is.na(length200) == T, length200 := 0]
 a[is.na(sample0914$length200),]$length200 <- 0
 a$length200.cut <- quant_groups(a$length200, 4)
 #For the first specimen
-a <- sample0914 %>%
+sample09141 <- sample0914 %>%
   group_by(sid) %>%
   .[order(.$date),] %>%
   filter(row_number() == 1)
@@ -229,7 +241,7 @@ system.time({
   a <- foreach(i = 1:length(x), .packages = c("parallel", "doParallel"), .combine = "rbind") %dopar%{
     foreach(j = 1:length(y), .packages = c("dplyr", "splines", "lubridate", "lmerTest"), .combine = "rbind") %dopar%{
       model <- sample0914 %>%
-        lmer(sample0914[,y[j]] ~ I(sample0914[,x[i]]/IQR(sample0914[,x[i]], na.rm = T)) + sample0914[,z[i]] + pm2.5 + fertility + edu + han + abs.cut + age.cut + ns(tmp, df = 3) + ns(rh, df = 3) + (1|sid), .,) %>%
+        lmer(sample0914[,y[j]] ~ I(sample0914[,x[i]]/IQR(sample0914[,x[i]], na.rm = T)) + pm2.5 + fertility + season3 + edu + han + abs.cut + age.cut + ns(tmp, df = 3) + ns(rh, df = 3) + (1|sid), .,) %>%
         summary(.) %>%
         .[["coefficients"]] 
       estimate <- model[2, 1]
@@ -239,7 +251,7 @@ system.time({
     }}
   stopCluster(cl)
 })
-write.table(a, file = "a", quote = F, sep = ";", row.names = T, col.names = T)
+write.csv(a, file = "a.csv", row.names = T)
 #cut
 system.time({
   y <- match(c('semen.volume', 'sperm.concentration', 'sperm.number', 'tm', 'pr'), names(sample0914))
@@ -250,7 +262,7 @@ system.time({
   a.cut <- foreach(i = 1:length(x), .packages = c("parallel", "doParallel"), .combine = "rbind") %dopar%{
     a <- foreach(j = 1:length(y), .packages = c("dplyr", "splines", "lubridate", "lmerTest"), .combine = "rbind") %dopar%{
       model <- sample0914 %>%
-        lmer(sample0914[,y[j]] ~ sample0914[,x[i]] + sample0914[,z[i]] + pm2.5 + fertility + edu + han + abs.cut + age.cut + ns(tmp, df = 3) + ns(rh, df = 3) + (1|sid), .) %>%
+        lmer(sample0914[,y[j]] ~ sample0914[,x[i]] + pm2.5 + fertility + season3 + edu + han + abs.cut + age.cut + ns(tmp, df = 3) + ns(rh, df = 3) + (1|sid), .) %>%
         summary(.) %>%
         .[["coefficients"]]
         estimate <- model[c(2:4), 1]
@@ -272,7 +284,7 @@ system.time({
   a <- foreach(i = 1:length(x), .packages = c("parallel", "doParallel"), .combine = "rbind") %dopar%{
     foreach(j = 1:length(y), .packages = c("dplyr", "splines", "lubridate", "lmerTest"), .combine = "rbind") %dopar%{
       model <- sample0914 %>%
-        lmer(sample0914[,y[j]] ~ I(sample0914[,x[i]]/IQR(sample0914[,x[i]])) + sample0914[,z[i]] + pm2.5 + fertility + edu + han + abs.cut + age.cut + ns(tmp, df = 3) + ns(rh, df = 3) + (1|sid), .) %>%
+        lmer(sample0914[,y[j]] ~ I(sample0914[,x[i]]/IQR(sample0914[,x[i]])) + pm2.5 + fertility + edu + han + abs.cut + age.cut + ns(tmp, df = 3) + ns(rh, df = 3) + (1|sid), .) %>%
         summary(.) %>%
         .[["coefficients"]] 
       output <- model[2, 5]
@@ -280,17 +292,20 @@ system.time({
     }}
   stopCluster(cl)
 })
-write.table(round(a, 3), file = "a", quote = F, sep = ";", row.names = T, col.names = T)
+write.csv(round(a, 3), file = "a.csv", row.names = T)
 
 #Table 4 Stratified
+I(pppndvi1000/IQR(pppndvi1000))
 model <- sample0914 %>%
-  lm(normal.forms ~ I(pppndvi1000/IQR(pppndvi1000)) + pm2.5 + fertility + edu + han + abs.cut + age.cut + ns(tmp, df = 3) + ns(rh, df = 3), .,
-       subset = season3 == 'w') %>%
+  lm(normal.forms ~ I(pppndvi1000/0.12) + pm2.5 + fertility + edu + han + abs.cut + ns(tmp, df = 3) + ns(rh, df = 3), .,
+       subset = age.bi == 'l') %>%
   summary(.) %>%
   .[["coefficients"]] 
 estimate <- model[2, 1]
 error <- model[2, 2]
-(output <- paste0(round(estimate, 3), ' (', round(estimate - 1.96*error, 3), ', ', round(estimate + 1.96*error, 3), ')') )
+estimate <- model[c(2:4), 1]#for cut
+error <- model[c(2:4), 2]#for cut
+(output <- paste0(round(estimate, 2), ' (', round(estimate - 1.96*error, 2), ', ', round(estimate + 1.96*error, 2), ')') )
 
 lrtest(lmer(pr ~ I(pppndvi400/IQR(pppndvi400)) + pm2.5 + fertility + edu + han + age.cut + abs.cut + ns(tmp, df = 3) + ns(rh, df = 3) + (1|sid), sample0914),
        lmer(pr ~ I(pppndvi400/IQR(pppndvi400)) * season - season + pm2.5 + fertility + edu + han + age.cut + abs.cut + ns(tmp, df = 3) + ns(rh, df = 3) + (1|sid), sample0914))
@@ -307,8 +322,8 @@ system.time({
   a <- foreach(i = 1:length(x), .packages = c("parallel", "doParallel"), .combine = "rbind") %dopar%{
     foreach(j = 1:length(y), .packages = c("dplyr", "splines", "lubridate", "lmerTest"), .combine = "rbind") %dopar%{
       model <- sample0914 %>%
-        lmer(sample0914[,y[j]] ~ I(sample0914[,x[i]]/IQR(sample0914[,x[i]])) + pm2.5 + fertility + edu + han + abs.cut + age.cut + ns(tmp, df = 3) + ns(rh, df = 3) + (1|sid), .,
-             subset = season3 == 'w') %>%
+        lmer(sample0914[,y[j]] ~ I(sample0914[,x[i]]/0.12) + pm2.5 + fertility + edu + han + abs.cut + age.cut + ns(tmp, df = 3) + ns(rh, df = 3) + (1|sid), .,
+             subset = season3 == 'c') %>% #season3/age.bi
         summary(.) %>%
         .[["coefficients"]] 
       estimate <- model[2, 1]
@@ -318,7 +333,7 @@ system.time({
     }}
   stopCluster(cl)
 })
-write.table(a, file = "a", quote = F, sep = ";", row.names = T, col.names = T)
+write.csv(a, file = "a.csv", row.names = T)
 #Effect modification
 system.time({
   y <- c('semen.volume', 'sperm.concentration', 'sperm.number', 'tm', 'pr')
@@ -328,14 +343,14 @@ system.time({
   registerDoParallel(cl)
   a <- foreach(i = 1:length(x), .packages = c("parallel", "doParallel"), .combine = "rbind") %dopar%{
     foreach(j = 1:length(y), .packages = c("lmtest", "splines", "lubridate", "lmerTest"), .combine = "rbind") %dopar%{
-      model <- lrtest(lmer(sample0914[,y[j]] ~ I(sample0914[,x[i]]/IQR(sample0914[,x[i]])) + age.cut + pm2.5 + fertility + edu + han + abs.cut + ns(tmp, df = 3) + ns(rh, df = 3) + (1|sid), sample0914,),
-                      lmer(sample0914[,y[j]] ~ I(sample0914[,x[i]]/IQR(sample0914[,x[i]])) * season3 - season3 + age.cut + pm2.5 + fertility + edu + han + abs.cut + ns(tmp, df = 3) + ns(rh, df = 3) + (1|sid), sample0914,))
+      model <- lrtest(lmer(sample0914[,y[j]] ~ I(sample0914[,x[i]]/0.12) + age.cut + pm2.5 + fertility + edu + han + abs.cut + ns(tmp, df = 3) + ns(rh, df = 3) + (1|sid), sample0914,),
+                      lmer(sample0914[,y[j]] ~ I(sample0914[,x[i]]/0.12) * season3 - season3 + age.cut + pm2.5 + fertility + edu + han + abs.cut + ns(tmp, df = 3) + ns(rh, df = 3) + (1|sid), sample0914,))
       output <- model[2, 5]
       data.frame(output, row.names = paste(x[i], y[j]))
     }}
   stopCluster(cl)
 })
-write.table(round(a, 3), file = "a", quote = F, sep = ";", row.names = T, col.names = T)
+write.csv(round(a, 3), file = "a.csv", row.names = T)
 
 #cut
 system.time({
@@ -347,7 +362,8 @@ system.time({
   a.cut <- foreach(i = 1:length(x), .packages = c("parallel", "doParallel"), .combine = "rbind") %dopar%{
     a <- foreach(j = 1:length(y), .packages = c("dplyr", "splines", "lubridate", "lmerTest"), .combine = "rbind") %dopar%{
       model <- sample0914 %>%
-        lmer(sample0914[,y[j]] ~ sample0914[,x[i]] + sample0914[,z[i]] + pm2.5 + edu + han + abs.cut + age.cut + ns(tmp, df = 3) + ns(rh, df = 3) + (1|sid), .) %>%
+        lmer(sample0914[,y[j]] ~ sample0914[,x[i]] + pm2.5 + fertility + edu + han + abs.cut + ns(tmp, df = 3) + ns(rh, df = 3) + (1|sid), ., 
+             subset = age.bi == "h") %>%
         summary(.) %>%
         .[[10]]
       estimate <- model[c(2:4), 1]
@@ -358,7 +374,7 @@ system.time({
   a.cut <- data.frame(a.cut, row.names = paste(rep(colnames(sample0914)[x], each = length(y)), rep(colnames(sample0914)[y], times = length(x))))
   stopCluster(cl)
 })
-write.table(a.cut, file = "a", sep = ";", quote = F, row.names = T, col.names = T)
+write.csv(a.cut, file = "a.csv", row.names = T)
 #linear trend
 system.time({
   y <- match(c('semen.volume', 'sperm.concentration', 'sperm.number', 'tm', 'pr'), names(sample0914))
@@ -379,33 +395,59 @@ system.time({
 })
 write.table(round(a, 3), file = "a", quote = F, sep = ";", row.names = T, col.names = T)
 
-#Table 1
-summary(semen1[!is.na(semen1$normal.forms),]$pndvi400.cut)
+#Table 1 --- DescrTab2
+setDT(sample09141)
+a <- descr(sample09141[!is.na(pm2.5), c("age.cut", "age", "han", "edu", "fertility", "pppndvi400.cut", "bmi")], "pppndvi400.cut",
+      format_options = list(combine_mean_sd = T),
+      format_summary_stats = list(mean = function(x) round(x, digits = 1)))
+a <- descr(sample0914[!is.na(pm2.5), c("abs.cut", "abs", "pm2.5", "tmp", "rh", "season3", "pppndvi400.cut")], "pppndvi400.cut",
+      format_options = list(combine_mean_sd = T),
+      format_summary_stats = list(mean = function(x) round(x, digits = 1)))
 
-p <- function(i,j) {n_perc0(sample0914[sample0914$pndvi400.cut == levels(sample0914$pndvi400.cut)[i],]$abs.cut == levels(sample0914$abs.cut)[j], digits = 1)}
-a <- t(sapply(c(1:4), function(i) sapply(c(1:4), p , i)))
-write.table(a, file = "a", quote = F, sep = ";", row.names = T, col.names = T)
-sapply(c(1:3), function(j) p(2, j))
+write.csv(print(a, silent = T)[["tibble"]], file = "a.csv") #silent = T, suppresses output to stdout (standard output)
 
-round(summary(sample0914$abs.cut)/387.54, 2)
-mean_sd(sample0914[sample0914$pndvi400.cut == levels(sample0914$pndvi400.cut)[4],]$rh)
-n_perc(factor(year(a[a$pndvi400.cut == levels(a$pndvi400.cut)[4],]$date)) == 2019)
-
-a <- sample0914 %>%
-  count(sid)
-summary(a$n == 1) 
-a[a$n ==38,]
 #Table 2
-a <- data.frame(
-  mean = round(sapply(c(39,40,41,42,35,44,24), function(x) mean(sample0914[,x], na.rm = T)), 3),
-  sd = round(sapply(c(39,40,41,42,35,44,24), function(x) sd(sample0914[,x], na.rm = T)), 3),
-  t(round(sapply(c(39,40,41,42,35,44,24), function(x) quantile(sample0914[,x], probs = c(0.01,0.25,0.5,0.75,0.99), na.rm = T)), 3))
+y <- c('semen.volume', 'sperm.concentration', 'sperm.number', 'tm', 'pr', 'normal.forms')
+a <- data.table(
+  mean = round(t(sample0914[!is.na(pm2.5), lapply(.SD, function(x) mean(x, na.rm = T)), .SDcols = y]), digits = 2),
+  sd = round(t(sample0914[!is.na(pm2.5), lapply(.SD, function(x) sd(x, na.rm = T)), .SDcols = y]), digits = 2),
+  round(t(sample0914[!is.na(pm2.5), lapply(.SD, function(x) quantile(x, probs = c(0.01,0.25,0.5,0.75,0.99), na.rm = T)), .SDcols = y]), digits = 1)
 )
-write.table(a, file = "a", quote = F, sep = ";", row.names = T, col.names = T)
+write.csv(a, file = "a.csv", quote = F)
+
+#Table 2 ----DescrTab2
+a <- descr(sample0914[!is.na(pm2.5), c('semen.volume', 'sperm.concentration', 'sperm.number', 'tm', 'pr', 'normal.forms')]
+           )
+print(a, silent = T)[["tibble"]]
+
+#Test number for each subjects
+setDT(sample0914)
+a <- sample0914[!is.na(pm2.5), nrow(.SD), by = sid] %>% 
+  .[, V1] %>% 
+  factor() %>% 
+  summary 
+a <- data.table(times = names(a), n = a)
+a[, times := as.numeric(times)]
+b <- ggplot(test.time, aes(y = times, weight = n)) +
+  geom_boxplot() +
+  labs(y = "Examination times") +
+  ylim(0, 40) +
+  theme(
+    panel.grid.major = element_line(colour = "white"), 
+    panel.grid.minor = element_line(colour = "aliceblue"),
+    panel.background = element_rect(fill = "gray93"),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank())
+
+
+a <- month(sample0914$date)
+a <- data.table(a, sample0914[, c("pppndvi400", "tmp", "pm2.5")])
+cor(a, use = "everything")
 
 #Exposure plot
 #Mean NDVI in 2016-2019, in GD
-ndvi.mean <- calc(pndvi, fun=mean, na.rm = T)
+pppndvi <- brick("pppndvi.tif")
+ndvi.mean <- projectRaster(calc(pppndvi, fun=mean, na.rm = T), crs = crs)
 writeRaster(ndvi.mean, "ndvimean", format = 'GTiff', overwrite = T)
 ndvi.mean <- raster("ndvimean.tif")
 sheng.sp <- as_Spatial(sheng$geometry)
@@ -521,4 +563,5 @@ b <- ggplot() +
         legend.text = element_text(size = 5, color = "gray22"),
         legend.margin = margin(t = 0.1, unit = "lines"))
 ggarrange(a, b)
+
 
