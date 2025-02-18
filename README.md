@@ -1,0 +1,2 @@
+These are the codes for the following study:
+Yang, Z., Xu, R., Wang, Q., Fan, Z., Wang, Y., Liu, T., Xu, L., Shi, C., Duan, Y., Zhang, X., & Liu, Y. (2021). Association of exposure to residential greenness with semen quality: A retrospective longitudinal study of sperm donation volunteers in Guangdong province, China. Ecotoxicology and Environmental Safety, 220, 112396. https://doi.org/10.1016/j.ecoenv.2021.112396
